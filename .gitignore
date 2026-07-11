@@ -1,0 +1,9 @@
+data/raw/
+data/corpus/
+data/processed/*.csv
+downloads/
+extracted/
+*.zip
+__pycache__/
+*.joblib
+.vscode/

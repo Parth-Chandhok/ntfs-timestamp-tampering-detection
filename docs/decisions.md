@@ -65,40 +65,42 @@ MFTECmd leaves the Created0x30 ($FN) column blank when it equals $SI, rather
 than repeating the date. So in my feature code, a blank $FN = no tampering,
 not missing data. Worth handling carefully so it doesn't get mislabelled.
 
+### 2026-07-17 — Prototype validated on real corpus
+Ran full pipeline on 808 NapierOne files (404 timestomped via PowerShell).
+MFTECmd extract → $SI/$FN mismatch rule → joined to ground-truth manifest.
+Result: perfect separation (404/404 both classes, zero errors).
+Note: join initially double-counted because benign and tampered copies share
+filenames; fixed by filtering ParentPath to the tampered folder only.
 
-### 2026-07-06 — Dataset direction: HYBRID (real baseline + injected tampering)
-The 20-file self-made set only proves the pipeline, not accuracy. To measure
-detection rate / precision / recall / false-positive rate I need data that is
-BOTH realistic AND reliably labelled. No single ready-made set gives both:
-real forensic images (NIST CFReDS, Digital Corpora) aren't labelled for
-tampering, and fully self-generated data is trivially separable.
-Decision: use a real file corpus as the clean/benign baseline, then inject
-known tampering into a recorded subset so labels stay trustworthy. This is the
-accepted method in the literature (Alji & Chougdali 2019; Palmbach &
-Breitinger 2020; hystck / Göbel et al. 2020). Pending Dr Nabeel's confirmation.
-
-
-### 2026-07-06 — Corpus choice: NapierOne (Tiny tier, forensics subset)
-Picked NapierOne (Davies, Macfarlane & Buchanan 2022, Edinburgh Napier) as the
-real baseline — modern, validated, free (ENU licence), 44 file types x 5,000
-files, the recognised successor to Govdocs1 (2009). Govdocs1 kept as an
-optional 2nd corpus for cross-corpus validation.
-
-IMPORTANT correction: the dataset is NOT on the GitHub repo. The repo
-(github.com/simonrdavies/NapierOne) is documentation only. The actual files
-live on the public AWS Open Data bucket  s3://napierone.com/  (region
-eu-north-1, no account needed) and on napierone.com. Full set is ~2 TB, split
-into Tiny (100 files/type), Small (1,000/type) and Total tiers.
-
-Scope taken: TINY tier (100 files/type, sequence 0001-0100) for the
-forensics-relevant file types only. 31 types, ~3,100 files. Enough to test the
-framework and false-positive behaviour without overloading the VM/snapshots.
-Skipped for now: MP3/MP4/MKV (large, low value here), plus DWG/EPS/EPUB/ICS/
-ODS/OXPS/ZLIB/DLL/RANDOM/ransomware subsets. DLL and the ransomware-encrypted
-subsets can be added later. The NOMAGIC variants (DOC/DOCX/PDF/PPT/PPTX/XLS/
-XLSX-NOMAGIC-tiny.zip) are ready-made test material for the file-type-disguise
-(magic-byte) rule — grab them when building that rule.
+### 2026-07-18 — USN Journal captures the tampering act
+Tampered files show extra BasicInfoChange records ~3.5s after their creation
+burst (6 records = 3 timestamp properties × BasicInfoChange+Close). Benign
+files show none. Independent of $SI/$FN comparison — survives SetMACE.
+Limitation: journal is a 32MB circular buffer; older history is lost.
 
 
+### 2026-07-19 — Three-signal correlation working
+build_features_usn.py: 808/808 matched in both MFT and USN. All three signals
+(si_fn_mismatch, usn_basicinfo_after_close, usn_claim_conflict) achieve 404/404
+separation. Signals-fired table shows only 0 or 3 — perfect agreement, no
+disagreement cases. Expected: one uniform tampering method trips all three.
+Discriminative value of USN signals to be demonstrated via SetMACE, which
+defeats $SI/$FN but not journal history.
+
+
+### 2026-07-21 — Confidence-score engine complete
+confidence_score.py fuses 3 signals into 0-100 score + per-file reason reports.
+Weights: SI/FN 40, USN BasicInfoChange 35, USN claim conflict 25, plus a 15-pt
+corroboration bonus when evidence spans multiple artefacts (MFT+USN).
+Result on 808 files: benign mean 0.0, tampered mean 100.0, all flagged files
+corroborated MFT+USN. Outputs: scored_files.csv, reason_reports.md, score_summary.png.
+Caveat: uniform tampering method means all signals agree; SetMACE test next.
+
+### 2026-07-22 — Dataset design: multi-tamper files (planned)
+Real attacks combine techniques, so single-tamper-per-file is unrealistic.
+Plan: once each tamper detector exists, generate files with random combinations
+(0-4 tampers) and a per-tamper-type manifest. Confidence engine already supports
+this (sums whatever signals fire). Deferred until detectors are built, so tampers
+aren't injected before they can be detected.
 
 

@@ -1,6 +1,8 @@
-data/raw/
+﻿data/raw/
 data/corpus/
 data/processed/*.csv
+data/labels/
+datagen/tamper_lab/
 downloads/
 extracted/
 *.zip

@@ -104,3 +104,107 @@ this (sums whatever signals fire). Deferred until detectors are built, so tamper
 aren't injected before they can be detected.
 
 
+### 2026-07-25 — Move-trick defeats single-rule detection; correlation survives
+Faked BOTH $SI and $FN via the move-trick (set $SI, then directory move makes the
+kernel propagate it into $FN) on 100 NapierOne files. Result:
+  - si_fn_mismatch caught 0/100 — the prior single-artefact approach is BLIND.
+  - USN correlation caught 100/100 (BasicInfoChange-after-close + claim-conflict).
+Demonstrates the framework degrades gracefully where a single rule fails. This is
+the core evidence that multi-artefact correlation beats single-signal detection.
+Move-trick works on the system drive, unlike SetMACE.
+
+
+### 2026-08-01 — Third artefact: Windows Event Log, not $LogFile
+$LogFile was the plan, but it's another file-level artefact, so it gives a third
+view of the same layer instead of a new one. More importantly, a clock change
+isn't a filesystem operation, so it can't see one at all. The Event Log sits at
+the system level and records the clock being moved — a genuinely different angle.
+Parsers for $LogFile do exist (LogFileParser, dfir_ntfs), so this wasn't a tooling
+limitation. See the future-work note below.
+Gotcha: Event ID 1 isn't unique — FilterManager uses it too. Filter on provider
+AND id.
+
+### 2026-08-08 — Experiment C: clock rollback beats every file-level artefact
+Roll the system clock back 3 years, create files normally, put the clock back.
+The timestamps are then honestly recorded — from a clock that was lying. $SI and
+$FN agree, USN agrees, nothing disagrees, because nobody lied about the file.
+400 files from NapierOne, seed 42. 200 under the true clock as controls, 200 under
+the fake clock, same code path — the clock is the only variable. Written
+byte-for-byte rather than copied, because Copy-Item preserves the source creation
+time and would have faked a mismatch unrelated to the clock. Stopped VBoxService
+and w32time so nothing resynced. Tamper window: 4.8 seconds.
+Result: si_fn_mismatch 0/200, both USN signals 0/200, eventlog_clock_window
+200/200 with zero false positives. Second graceful-degradation result, and a
+stronger one — here both prior artefacts fail, not just one.
+
+### 2026-08-08 — Clock jumps must be paired by size, not time order
+Real bug, found and fixed. A backward jump gets logged under the already-rolled-
+back clock, so it sits years out of sequence next to its own restore event.
+Sorting chronologically and scanning forward fails. Pairing has to match
+mirror-image sizes, minimum 30 days.
+Why 30 days: normal VM noise tops out around 8 days (suspend/resume). The tamper
+is 1,095 days. Nothing sits between them.
+Side finding: the Event Log ends up non-monotonic — two 2023-dated entries in an
+otherwise 2026 log. That's itself an indicator, and harder to scrub than file
+timestamps. Possible future signal.
+
+
+### 2026-08-08 — Event Log signal weighted 45 (MEDIUM band)
+Decided the weight before looking at what band it produced, to avoid tuning the
+number to get the answer I wanted.
+For: clock changes are rare, deliberate, need admin, and the rule requires the
+file's claimed birth to fall inside the window — not just that a jump happened.
+Against: not file-specific (every file born in that window gets flagged), and real
+machines do have big legitimate corrections — dead CMOS battery, timezone errors.
+So Experiment C lands at MEDIUM, not HIGH. That's correct: one uncorroborated
+artefact deserves less confidence than three agreeing ones, however accurate it
+was here. Calling it HIGH off a single signal would be overclaiming.
+
+
+### 2026-08-08 — One scoring engine instead of copies
+confidence_score.py and confidence_score_movetrick.py were near-duplicates of the
+same rule table. Change a weight in one, forget the other, and the experiments
+stop being comparable. Merged into one engine with an experiment flag:
+  python src/model/confidence_score.py --exp A|B|C
+Same engine, rules and threshold across all three, so the scores mean the same
+thing. Also added derive_missing_signals() — where an older feature file lacks a
+newer signal but the evidence is there, derive it rather than default to zero.
+"Tested and didn't fire" is a result. "Never tested" is a gap.
+
+
+### 2026-08-08 — Unified evaluation
+Pooled all three experiments into one population: 1,308 files, 704 tampered.
+One engine, one threshold (1 — any evidence counts; higher would just be tuning
+the cutoff to suit Experiment C).
+Result: TP 704, TN 604, FP 0, FN 0.
+
+  Exp  n    $MFT SI/FN  USN basic  USN claim  EventLog
+  A   404    404/404     404/404    404/404     0/404
+  B   100      0/100     100/100    100/100     0/100
+  C   200      0/200       0/200      0/200   200/200
+
+No artefact survives all three attacks; no attack escapes all three artefacts.
+Alji & Chougdali (2019) use $MFT alone — column one — missing 300 of 704.
+Confidence drops 100 → 60 → 45 as attacks silence more artefacts, but detection
+holds at 100%. The drop is intended: the score reports how much independent
+evidence backs the verdict.
+
+Caveat: zero false positives is partly by construction — each experiment's
+controls only met their own conditions, and B has no controls at all. The zeros
+in the table aren't failures either; there was simply no clock tampering in A
+and B for the Event Log to find.
+
+
+### 2026-08-09 — $LogFile: evaluated properly, left as future work
+Parsers exist, so skipping it was never about tooling. Left out because it's
+another file-level artefact, it can't see clock changes so Experiment C stays
+uncovered, and its ~64 MB buffer recycles in minutes — the records for all three
+experiments were long gone by the time I looked, so adding it would mean
+re-running everything.
+Worth doing later: $LogFile logs moves and renames directly, so it would probably
+catch the Experiment B move-trick more directly than the USN inference does.
+Related work to cite: NTFS Log Tracker (blueangel) does pattern-based timestamp
+manipulation detection on $LogFile and $UsnJrnl — single-artefact, pattern
+matching, author admits false positives. Good contrast to this framework.
+
+

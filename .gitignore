@@ -9,3 +9,4 @@ extracted/
 __pycache__/
 *.joblib
 .vscode/
+.env

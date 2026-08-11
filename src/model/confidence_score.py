@@ -106,6 +106,26 @@ RULES = [
                         _days(_get(r, "usn_claim_gap_s"))),
     },
     {
+        # Clock-independent. USN sequence numbers are byte offsets into an
+        # append-only journal: they cannot be rewound by changing the system
+        # clock, so a file claiming to predate its own journal neighbourhood is
+        # internally inconsistent regardless of what its timestamps say.
+        # Weighted 35, equal to the other USN signals.
+        # LIMITATION: a legitimately old file copied onto the volume produces
+        # the same pattern. Requires corroboration; stated in reason reports.
+        "id":       "usn_seq_inconsistent",
+        "weight":   35,
+        "artefact": "USN",
+        "reason":   ("File's claimed creation time is far older than the journal "
+                     "records written around it; USN sequence numbers are "
+                     "clock-independent and cannot be rewound "
+                     "(NOTE: a legitimately old file copied onto this volume "
+                     "would produce the same pattern)"),
+        "detail":   lambda r: (lambda d: f"claims {abs(float(d))/86400:,.0f} days "
+                               f"older than its journal neighbourhood" if d else "")(
+                        _get(r, "usn_seq_gap_s")),
+    },
+    {
         # Added for Experiment C. System-level artefact: the OS itself recorded
         # the clock being moved. Weighted above the USN signals (a clock change
         # is rare and deliberate, and this rule requires temporal correlation
@@ -185,6 +205,16 @@ def derive_missing_signals(df):
         df["usn_claim_gap_s"]    = gap
         df["usn_claim_conflict"] = (gap < -1).astype(int)
         print("  derived usn_claim_conflict from $SI vs first USN entry")
+
+    # The USN sequence signal is added by add_usn_sequence_signal.py, which
+    # rewrites the feature files in place. It cannot be derived here (it needs
+    # the raw journal). Warn loudly rather than silently scoring it as zero -
+    # a missing signal must never masquerade as a negative result.
+    if "usn_seq_inconsistent" not in df.columns:
+        print("  WARNING: usn_seq_inconsistent absent from this feature file.")
+        print("           Run: python src/features/add_usn_sequence_signal.py")
+        print("           Scoring will proceed WITHOUT this signal.")
+
     return df
 
 

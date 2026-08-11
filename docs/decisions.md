@@ -208,3 +208,50 @@ manipulation detection on $LogFile and $UsnJrnl — single-artefact, pattern
 matching, author admits false positives. Good contrast to this framework.
 
 
+
+### 2026-08-10 — Experiment B has no benign controls (known limitation)
+movetrick.ps1 generated 100 tampered files only. This was adequate for the
+original question — does faking both $SI and $FN blind si_fn_mismatch? — which
+needs only tampered files. It became a limitation once the experiments were
+pooled into a unified evaluation reporting a false-positive rate: Experiment B
+contributes to recall but not to FPR, so the pooled figure derives from A and C.
+For the LLM triage sample, benign files are drawn from the shared NapierOne pool.
+Generating dedicated matched controls is straightforward and is listed as future
+work.
+
+
+### 2026-08-11 — USN sequence numbers: the first signal that survives all three attacks
+Every USN record has a sequence number — effectively a line number in the
+journal. It only counts upward, the filesystem assigns it, and nothing an
+attacker does can rewind it. Rolling the clock back doesn't touch it.
+
+So: read the journal in sequence order, track the highest timestamp seen so far.
+That's a floor. A record further down the journal can't honestly claim an earlier
+date. My tampered files claim 2023 but sit at positions written after records
+stamped 2026 — impossible.
+
+Result: 404/404 (A), 100/100 (B), 200/200 (C), zero false positives. The gaps
+came out at 1,660 / 1,587 / 1,096 days — that last one matching my injected
+1,095-day rollback almost exactly.
+
+First attempt failed, and why is worth knowing. I originally compared each file
+against the median timestamp of its journal neighbours. Worked for A and B, but
+caught only 1/200 in C — because the journal entries for files created under the
+fake clock carry the fake time too. A tampered file's neighbours are other
+tampered files, so I was measuring the lie against itself. The running maximum
+avoids this: it only looks at earlier journal positions, written before the clock
+was touched.
+
+Scores: B goes 60 → 95, C goes 45 → 95. Both now backed by two artefacts.
+
+This changes my story. I used to say confidence degrades (100 → 60 → 45) as
+attacks silence more artefacts. Not true anymore. The better version: each attack
+defeats a different set of signals, but every attack is caught by at least two
+independent artefacts. And underneath that — this signal survives not because
+it's a new artefact, but because it reads a field the attacker can't write.
+Timestamps are attacker-controlled. Sequence numbers aren't.
+
+Limitation: a genuinely old file copied onto the volume looks identical — old
+claimed date, recent journal position. This signal can't tell them apart on its
+own, so it needs corroboration.
+

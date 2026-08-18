@@ -255,3 +255,98 @@ Limitation: a genuinely old file copied onto the volume looks identical — old
 claimed date, recent journal position. This signal can't tell them apart on its
 own, so it needs corroboration.
 
+
+### 2026-08-12 — LLM triage comparison: three arms, 150 files
+Supervisor asked for rules vs LLM vs hybrid. Built a harness that bundles each
+file's three artefacts into one readable case file, strips the giveaway filenames
+so the model can't read the answer off the label, and sends it to Gemini with a
+JSON schema for the verdict. Sample: 150 files, balanced 75 tampered / 75 benign.
+Prompt deliberately never says what to look for — telling it would test
+instruction-following, not reasoning.
+  Rules      accuracy 0.97  recall 1.00  FPR 0.05
+  LLM alone  accuracy 0.77  recall 0.71  FPR 0.17
+  Hybrid     accuracy 0.75  recall 0.51  FPR 0.00
+The averages hide the real story. By attack, LLM recall was A 1.00, B 1.00,
+C 0.12. It matched the rules wherever something was visibly wrong in the file,
+and fell apart where detection needed correlating across artefacts.
+Two other measurements: hallucination was near-zero (1 unsupported claim in 375),
+so the failure is reasoning rather than making things up. And confidence was
+useless as a signal — 0.94 when right, 0.87 when wrong.
+
+
+### 2026-08-12 — The hybrid arm made things worse
+Showing the LLM the rule verdict and asking it to critique that verdict dropped
+recall from 0.71 to 0.51. Files it had classified correctly on its own it got
+wrong once shown the right answer. Precision hit 1.00 and FPR 0.00, but only
+because it stopped accusing anything.
+Prime suspect is my own prompt wording: "Your task is NOT to agree with it." That
+is an instruction to disagree, and it disagreed. Recorded as a prompt artefact
+rather than a property of hybrid pipelines — an honest limitation of the
+experiment.
+
+
+### 2026-08-12 — Ablation: removing evidence improved results
+Ran Experiment C with the event log withheld. Recall went UP, 0.12 to 0.48,
+though false positives rose too. The model did better without the clock evidence
+than with it — so it wasn't ignoring that evidence, it was actively misreading it.
+Checked the reasoning on the misses: it read the clock changes, considered them,
+and dismissed them because the file's timestamps were internally consistent. That
+consistency is exactly what clock rollback produces. It treated the fingerprint of
+the attack as proof of innocence.
+
+
+### 2026-08-13 — Bigger model, opposite failure
+Free tier on gemini-3.5-flash caps at 20 requests/day, so all the above ran on
+flash-lite. Paid $10 to test whether the Experiment C failure was a small-model
+limitation. Ran 124 calls on the reasoning model.
+Result: recall 1.00, FPR 1.00. It flagged 61 of 62 files. Caught every tampered
+file by accusing everything.
+So both tiers failed, in opposite directions. The lite model read consistency as
+innocence and under-flagged. The reasoning model read "this volume had a clock
+rollback" as guilt and over-flagged. Neither did the file-level test: does THIS
+file's claimed creation fall inside the rollback window?
+Cost note: ~$0.072 per call vs a fraction of a cent for lite, and 29s vs 1.8s.
+50x the price, 16x slower, worse accuracy.
+An early 2-file test on the reasoning model looked like a success — but both files
+were tampered. A model that flags everything scores 2/2. The benign controls are
+what exposed it, which is a decent argument for balanced sampling.
+
+
+### 2026-08-14 — The failure is arithmetic, not comprehension
+Supervisor asked WHY the LLM underperforms, not by how much. Tested it properly.
+The bundle previously listed clock changes as volume-wide context and left the
+model to work out whether this file's birth date fell inside one. Added a single
+line stating it outright: "this file's claimed creation falls INSIDE / OUTSIDE a
+window during which the clock was set backwards." No prompt text changed.
+Result on the lite model: recall 0.12 -> 1.00, FPR 0.216 -> 0.000, accuracy 1.000.
+TP 25, TN 37, FP 0, FN 0.
+And it reasoned properly rather than parroting the hint — cited all three
+artefacts, and independently invoked the journal's running maximum ("the highest
+prior timestamp is 2026 while the file claims 2023"). It understood monotonic
+journal ordering all along. It just couldn't work out which files to apply it to.
+The discriminating computation is interval containment: a 4.8-second window
+against a 3-year anomaly. Rules compute that exactly; LLMs approximate it.
+This is the empirical case for the architecture the supervisor proposed — rules
+in the detection path, LLM in the explanation path.
+The lite model with the join also beats the reasoning model without it, at 1/50th
+the cost and 14x the speed.
+Honest note: supplying the correlation is a concession to the LLM. Work moved
+from the model to the pipeline. It shows the failure was arithmetic, but it also
+shows the LLM needs the detector's help to succeed.
+
+
+### 2026-08-14 — Hybrid with the join: framing, not evidence
+Ran the hybrid arm on the same 62 files with the correlation line supplied.
+  LLM + join     recall 1.000  FPR 0.000  accuracy 1.000
+  Hybrid + join  recall 0.520  FPR 0.000  accuracy 0.806
+Same model, same evidence, same files. Only the prompt differs. The hybrid missed
+12 of 25 tampered files that the LLM arm caught with identical input.
+So the two failures were separate all along. The evidence problem is fixed by the
+join. The framing problem isn't — "Your task is NOT to agree with it" costs about
+48% of recall regardless of how good the evidence is.
+Note the hybrid never produced a false positive in either condition. Told to be
+sceptical, it only ever under-accuses.
+Conclusion for the write-up: feeding rule output to an LLM did not improve triage
+in any configuration tested. With poor evidence it collapsed to 0.04 recall; with
+perfect evidence it still lost half. The instruction to critique is doing the
+damage, which is a design warning for hybrid pipelines generally.

@@ -1,0 +1,28 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260813155627
+Username: DESKTOP-U7E6V02\joy
+RunAs User: DESKTOP-U7E6V02\joy
+Configuration Name: 
+Machine: DESKTOP-U7E6V02 (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -noexit -command try { . "c:\Users\joy\AppData\Local\Programs\Microsoft VS Code\df53daabb1\resources\app\out\vs\workbench\contrib\terminal\common\scripts\shellIntegration.ps1" } catch {}
+Process ID: 11200
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is C:\ntfs-tamper-detect\results\run_log_flash_expC.txt
+PS C:\ntfs-tamper-detect\src\llm> python run_llm_triage.py --arm llm --exp C --model gemini-3.5-flash
+
+PS C:\ntfs-tamper-detect\src\llm> python run_llm_triage.py --arm hybrid --exp C --model gemini-3.5-flash
+
+PS C:\ntfs-tamper-detect\src\llm> Stop-Transcript
+**********************
+Windows PowerShell transcript end
+End time: 20260813174320
+**********************

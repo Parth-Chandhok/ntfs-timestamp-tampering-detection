@@ -22,7 +22,7 @@ DETECT_THRESHOLD = 1
 
 EXPERIMENTS = {
     "A": ("PowerShell $SI timestomp",            "scored_files_A.csv"),
-    "B": ("Move-trick ($SI and $FN both faked)", "scored_files_B.csv"),
+    "B": ("Move-trick (SI and FN both faked)", "scored_files_B.csv"),
     "C": ("System clock rollback",               "scored_files_C.csv"),
 }
 
@@ -204,3 +204,4 @@ print(sig_df.to_string(index=False))
 print()
 print("Saved ->", RESULTS / "unified_evaluation.md")
 print("Saved ->", RESULTS / "unified_scores.png")
+

@@ -350,3 +350,22 @@ Conclusion for the write-up: feeding rule output to an LLM did not improve triag
 in any configuration tested. With poor evidence it collapsed to 0.04 recall; with
 perfect evidence it still lost half. The instruction to critique is doing the
 damage, which is a design warning for hybrid pipelines generally.
+
+
+### 2026-08-19 — Unified reporter: rules decide, LLM explains
+Final architecture the supervisor asked for. The rules classify; the LLM writes
+the explanation. It never sees raw artefacts, never issues a verdict, and cannot
+change one.
+94 flagged files in the sample, plus one incident summary generated over all
+1,308.
+Measured, not judged by eye:
+  faithfulness (no invented figures)  1.000
+  completeness (every signal named)   1.000
+  unsupported figures                 0 of 94 reports
+  mean length                         124 words
+Worth stating plainly: given the job of DECIDING, this same model managed 0.12
+recall on Experiment C. Given the job of EXPLAINING, it is perfect. That is the
+whole argument for the split.
+Caveats on the metrics: completeness is keyword-matched, so a report could name a
+signal without explaining it well. Faithfulness only checks 4+ digit numbers, so
+a wrong qualitative claim would pass. Both bound what these numbers prove.

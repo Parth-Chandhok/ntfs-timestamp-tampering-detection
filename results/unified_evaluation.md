@@ -17,7 +17,7 @@ A single scoring engine, a single rule table and a single detection threshold ap
 | Exp | Tampering | n | Recall | FPR | Mean score (tampered) | Band |
 |---|---|---|---|---|---|---|
 | A | PowerShell $SI timestomp | 808 | 1.000 | 0.000 | 100.0 | VERY HIGH |
-| B | Move-trick ($SI and $FN both faked) | 100 | 1.000 | n/a | 95.0 | VERY HIGH |
+| B | Move-trick (SI and FN both faked) | 100 | 1.000 | n/a | 95.0 | VERY HIGH |
 | C | System clock rollback | 400 | 1.000 | 0.000 | 95.0 | VERY HIGH |
 
 ## Which indicator caught which attack
